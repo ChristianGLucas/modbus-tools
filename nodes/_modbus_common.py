@@ -66,6 +66,15 @@ class ModbusCodecError(ValueError):
 # are kept as a defensive backstop for anything that validation doesn't cover.
 ENCODE_ERROR_TYPES = (ModbusCodecError, ValueError, OverflowError, struct.error, ModbusException)
 
+# Every exception type a decode node's try/except should catch around
+# `decoder.decode(pdu_bytes)` + `pdu_to_frame_kwargs(pdu)`. A structurally
+# valid-but-truncated PDU body (passes the CRC16/LRC/length check, but has too
+# few bytes for its function code's fixed-width fields) makes pymodbus's own
+# struct.unpack raise struct.error — notably NOT a ValueError, so it is not
+# caught by DecodePDU.decode()'s own internal (ModbusException, ValueError,
+# IndexError) guard either, and would otherwise propagate raw out of the node.
+DECODE_ERROR_TYPES = (ModbusCodecError, ValueError, IndexError, struct.error, ModbusException)
+
 
 def new_decoder(is_response: bool) -> DecodePDU:
     """A DecodePDU configured to decode requests (is_response=False) or responses."""

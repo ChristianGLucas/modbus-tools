@@ -46,3 +46,16 @@ def test_decode_ascii_tolerates_surrounding_whitespace():
     result = decode_ascii_frame(ax, DecodeAsciiFrameInput(frame="  " + _REQUEST + "  ", is_response=False))
     assert result.error == ""
     assert result.frame.function_code == 3
+
+
+def test_decode_ascii_truncated_pdu_body_is_structured_error_not_a_traceback():
+    # device 1, fc 5 (WriteSingleCoil, needs 4 data bytes), only 1 given —
+    # struct.error used to escape uncaught and leak a raw traceback.
+    content = bytes([0x01, 0x05, 0xFF])
+    frame = ":" + content.hex().upper() + format(oracle_lrc(content), "02X") + "\r\n"
+    ax = FakeAxiomContext()
+    result = decode_ascii_frame(ax, DecodeAsciiFrameInput(frame=frame, is_response=False))
+    assert result.error != ""
+    assert result.lrc_valid is True
+    assert "Traceback" not in result.error
+    assert ".axiom" not in result.error

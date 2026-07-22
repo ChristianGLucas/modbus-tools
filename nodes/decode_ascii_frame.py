@@ -4,7 +4,7 @@ from pymodbus.framer.ascii import FramerAscii
 
 from gen.messages_pb2 import DecodeAsciiFrameInput, DecodeAsciiFrameOutput, ModbusFrame
 from gen.axiom_context import AxiomContext
-from nodes._modbus_common import MAX_FRAME_BYTES, ModbusCodecError, new_decoder, pdu_to_frame_kwargs
+from nodes._modbus_common import DECODE_ERROR_TYPES, MAX_FRAME_BYTES, new_decoder, pdu_to_frame_kwargs
 
 
 def decode_ascii_frame(ax: AxiomContext, input: DecodeAsciiFrameInput) -> DecodeAsciiFrameOutput:
@@ -42,18 +42,17 @@ def decode_ascii_frame(ax: AxiomContext, input: DecodeAsciiFrameInput) -> Decode
         return DecodeAsciiFrameOutput(lrc_valid=True, error="frame has no function code")
 
     decoder = new_decoder(input.is_response)
-    pdu = decoder.decode(pdu_bytes)
-    if pdu is None:
-        return DecodeAsciiFrameOutput(
-            lrc_valid=True,
-            error=f"unrecognized or unsupported function code {pdu_bytes[0]}",
-        )
-    pdu.dev_id = device_id
-    pdu.transaction_id = 0
-
     try:
+        pdu = decoder.decode(pdu_bytes)
+        if pdu is None:
+            return DecodeAsciiFrameOutput(
+                lrc_valid=True,
+                error=f"unrecognized or unsupported function code {pdu_bytes[0]}",
+            )
+        pdu.dev_id = device_id
+        pdu.transaction_id = 0
         kwargs = pdu_to_frame_kwargs(pdu)
-    except ModbusCodecError as exc:
-        return DecodeAsciiFrameOutput(lrc_valid=True, error=str(exc))
+    except DECODE_ERROR_TYPES as exc:
+        return DecodeAsciiFrameOutput(lrc_valid=True, error=f"{type(exc).__name__}: {exc}")
 
     return DecodeAsciiFrameOutput(frame=ModbusFrame(**kwargs), lrc_valid=True)

@@ -54,3 +54,16 @@ def test_decode_tcp_length_mismatch_is_structured_error():
     ax = FakeAxiomContext()
     result = decode_tcp_frame(ax, DecodeTcpFrameInput(data=bytes(tampered), is_response=False))
     assert result.error != ""
+
+
+def test_decode_tcp_truncated_pdu_body_is_structured_error_not_a_traceback():
+    # unit 1, fc 5 (WriteSingleCoil, needs 4 data bytes), only 1 given —
+    # struct.error used to escape uncaught and leak a raw traceback.
+    pdu = bytes([0x05, 0xFF])
+    length = len(pdu) + 1
+    mbap = (0).to_bytes(2, "big") + b"\x00\x00" + length.to_bytes(2, "big") + (1).to_bytes(1, "big") + pdu
+    ax = FakeAxiomContext()
+    result = decode_tcp_frame(ax, DecodeTcpFrameInput(data=mbap, is_response=False))
+    assert result.error != ""
+    assert "Traceback" not in result.error
+    assert ".axiom" not in result.error

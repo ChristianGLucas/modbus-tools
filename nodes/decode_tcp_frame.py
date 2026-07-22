@@ -2,7 +2,7 @@ from pymodbus.framer.socket import FramerSocket
 
 from gen.messages_pb2 import DecodeTcpFrameInput, DecodeTcpFrameOutput, ModbusFrame
 from gen.axiom_context import AxiomContext
-from nodes._modbus_common import MAX_FRAME_BYTES, ModbusCodecError, new_decoder, pdu_to_frame_kwargs
+from nodes._modbus_common import DECODE_ERROR_TYPES, MAX_FRAME_BYTES, new_decoder, pdu_to_frame_kwargs
 
 
 def decode_tcp_frame(ax: AxiomContext, input: DecodeTcpFrameInput) -> DecodeTcpFrameOutput:
@@ -24,15 +24,16 @@ def decode_tcp_frame(ax: AxiomContext, input: DecodeTcpFrameInput) -> DecodeTcpF
             error="malformed MBAP frame: too short, wrong protocol id, or length mismatch"
         )
 
-    pdu = decoder.decode(pdu_bytes)
-    if pdu is None:
-        return DecodeTcpFrameOutput(error=f"unrecognized or unsupported function code {pdu_bytes[0]}")
-    pdu.dev_id = dev_id
-    pdu.transaction_id = tid
-
     try:
+        pdu = decoder.decode(pdu_bytes)
+        if pdu is None:
+            return DecodeTcpFrameOutput(
+                error=f"unrecognized or unsupported function code {pdu_bytes[0]}"
+            )
+        pdu.dev_id = dev_id
+        pdu.transaction_id = tid
         kwargs = pdu_to_frame_kwargs(pdu)
-    except ModbusCodecError as exc:
-        return DecodeTcpFrameOutput(error=str(exc))
+    except DECODE_ERROR_TYPES as exc:
+        return DecodeTcpFrameOutput(error=f"{type(exc).__name__}: {exc}")
 
     return DecodeTcpFrameOutput(frame=ModbusFrame(**kwargs))

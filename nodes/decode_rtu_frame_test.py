@@ -60,3 +60,19 @@ def test_decode_rtu_exception_response():
     assert result.frame.is_exception is True
     assert result.frame.exception_code == 2
     assert result.frame.function_code == 3
+
+
+def test_decode_rtu_truncated_pdu_body_is_structured_error_not_a_traceback():
+    # device 1, fc 5 (WriteSingleCoil, needs 4 data bytes), only 1 given.
+    # CRC is still computed correctly over the (truncated) payload, so this
+    # passes the CRC check and reaches pymodbus's struct.unpack, which used to
+    # raise struct.error uncaught and leak a raw traceback. Regression test.
+    payload = bytes([0x01, 0x05, 0xFF])
+    frame = payload + oracle_crc16_wire_bytes(payload)
+    ax = FakeAxiomContext()
+    result = decode_rtu_frame(ax, DecodeRtuFrameInput(data=frame, is_response=False))
+    assert result.error != ""
+    assert result.crc_valid is True
+    assert "Traceback" not in result.error
+    assert ".axiom" not in result.error
+    assert ".venv" not in result.error

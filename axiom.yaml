@@ -1,0 +1,53 @@
+name: christiangeorgelucas/modbus-tools
+version: 0.1.0
+language: python
+description: Composable Modbus industrial-protocol frame encode/decode nodes wrapping BSD-3-Clause pymodbus — decode/encode Modbus RTU frames (device id + PDU + CRC16), Modbus TCP/MBAP application data units, and Modbus ASCII frames (LRC-checked) into/from a canonical function-code + fields envelope (register/coil addresses, quantities, values, coil bits, exception codes) covering read/write coils, read/write holding and input registers, mask-write register, and read/write-multiple registers. Also exposes standalone CRC16/LRC computation, typed register-block decode/encode (int16/uint16/int32/uint32/int64/uint64/float32/float64 with configurable byte/word order), and coil-bit packing utilities. Pure stateless codec — no socket or bus I/O. Offline, deterministic.
+nodes:
+    - name: DecodeRtuFrame
+      input: DecodeRtuFrameInput
+      output: DecodeRtuFrameOutput
+      description: Decode a raw Modbus RTU frame (device id + function code + data + CRC16) into its function code and fields — register/coil addresses, quantities, values, or an exception code. Independently verifies the trailing CRC16 (reported as crc_valid) regardless of whether the PDU shape also parses. Malformed or too-short input, or an unrecognized function code, returns a structured error, never a crash.
+    - name: EncodeRtuFrame
+      input: EncodeRtuFrameInput
+      output: EncodeRtuFrameOutput
+      description: Build a raw Modbus RTU frame (device id + function code + data + CRC16) from a structured function-code + fields description, computing and appending the CRC16 automatically. Supports read/write coils, read/write registers, mask-write register, read/write-multiple registers, and exception responses. Out-of-range addresses/quantities or an unsupported function code return a structured error, never a crash.
+    - name: DecodeTcpFrame
+      input: DecodeTcpFrameInput
+      output: DecodeTcpFrameOutput
+      description: Decode a raw Modbus TCP/MBAP application data unit (MBAP header + function code + data) into its transaction id, unit id, function code, and fields. Modbus TCP has no CRC — the MBAP length field is validated instead. A too-short frame, wrong protocol id, length mismatch, or unrecognized function code returns a structured error, never a crash.
+    - name: EncodeTcpFrame
+      input: EncodeTcpFrameInput
+      output: EncodeTcpFrameOutput
+      description: Build a raw Modbus TCP/MBAP application data unit (MBAP header + function code + data) from a structured function-code + fields description, using the frame's transaction_id and device_id as the MBAP unit id. Out-of-range fields or an unsupported function code return a structured error, never a crash.
+    - name: DecodeAsciiFrame
+      input: DecodeAsciiFrameInput
+      output: DecodeAsciiFrameOutput
+      description: Decode a Modbus ASCII frame (':' + hex-encoded device id/function code/data/LRC + CRLF) into its function code and fields. Independently verifies the trailing LRC (reported as lrc_valid) regardless of whether the PDU shape also parses. A missing ':' start, invalid/odd hex, too-short content, or unrecognized function code returns a structured error, never a crash.
+    - name: EncodeAsciiFrame
+      input: EncodeAsciiFrameInput
+      output: EncodeAsciiFrameOutput
+      description: Build a Modbus ASCII frame (':' + uppercase hex-encoded device id/function code/data/LRC + CRLF) from a structured function-code + fields description, computing and appending the LRC automatically. Out-of-range fields or an unsupported function code return a structured error, never a crash.
+    - name: ComputeCrc16
+      input: ComputeCrc16Input
+      output: ComputeCrc16Output
+      description: Compute the Modbus RTU CRC16 (initial value 0xFFFF, polynomial 0xA001) over arbitrary bytes — typically a frame's device id + function code + data — returning the checksum both as an integer and as the two wire bytes (low byte first). Optionally validates an expected CRC16 in the same call, reporting the result in `matches`.
+    - name: ComputeLrc
+      input: ComputeLrcInput
+      output: ComputeLrcOutput
+      description: Compute the Modbus ASCII LRC (two's complement of the sum of bytes, masked to 8 bits) over arbitrary bytes — typically a frame's device id + function code + data. Optionally validates an expected LRC in the same call, reporting the result in `matches`.
+    - name: DecodeRegisterBlock
+      input: DecodeRegisterBlockInput
+      output: DecodeRegisterBlockOutput
+      description: Decode a block of raw 16-bit Modbus registers into a list of typed values (int16, uint16, int32, uint32, int64, uint64, float32, float64), with configurable byte order (within each register) and word order (across registers, for multi-register types like a 32-bit float spanning 2 registers). Each value is returned as both a double (convenient, exact for all types except very large int64/uint64) and an exact decimal string. A register count that doesn't divide evenly by the type's width, or an unknown type/order, returns a structured error.
+    - name: EncodeRegisterBlock
+      input: EncodeRegisterBlockInput
+      output: EncodeRegisterBlockOutput
+      description: Encode a list of decimal-string values (int16, uint16, int32, uint32, int64, uint64, float32, float64) into a block of raw 16-bit Modbus registers, with configurable byte order and word order — the inverse of DecodeRegisterBlock. An unparseable value, a value out of range for its type, or an unknown type/order returns a structured error, never a crash.
+    - name: PackCoils
+      input: PackCoilsInput
+      output: PackCoilsOutput
+      description: Pack a list of coil/discrete-input bit values into bytes, LSB-first — the same wire encoding Modbus function codes 1, 2, and 15 use for coil data. Zero-pads the final byte if the bit count isn't a multiple of 8.
+    - name: UnpackCoils
+      input: UnpackCoilsInput
+      output: UnpackCoilsOutput
+      description: Unpack bytes into a list of coil/discrete-input bit values, LSB-first — the inverse of PackCoils. An optional count trims the trailing zero-padding bits from the final byte; a count larger than the available bits returns a structured error.

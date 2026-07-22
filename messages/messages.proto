@@ -1,0 +1,297 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.modbus_tools;
+
+// Canonical envelope for a decoded Modbus PDU (function code 1-6, 15, 16, 22, 23,
+// or an exception response). Encode nodes consume it; decode nodes produce it.
+// Only the fields relevant to the frame's function_code are populated/meaningful —
+// unused fields carry their zero value.
+message ModbusFrame {
+  // Modbus function code (1=ReadCoils, 2=ReadDiscreteInputs, 3=ReadHoldingRegisters,
+  // 4=ReadInputRegisters, 5=WriteSingleCoil, 6=WriteSingleRegister,
+  // 15=WriteMultipleCoils, 16=WriteMultipleRegisters, 22=MaskWriteRegister,
+  // 23=ReadWriteMultipleRegisters). Ignored (and recomputed) if is_exception is set
+  // on encode — the exception function code is base_function_code | 0x80.
+  int32 function_code = 1;
+  // Modbus RTU slave address / Modbus TCP unit identifier (0-255).
+  int32 device_id = 2;
+  // Modbus TCP transaction identifier (MBAP header). Always 0 for RTU/ASCII.
+  int32 transaction_id = 3;
+  // Starting register/coil address (0-65535) for read/write-single/write-multiple
+  // requests and their echoing responses.
+  int32 address = 4;
+  // Quantity of registers/coils for a read request or a write-multiple response ack.
+  int32 count = 5;
+  // Register values (each 0-65535) — populated on a read-registers response and on
+  // a write-multiple-registers request.
+  repeated int32 registers = 6;
+  // Coil/discrete-input bit values — populated on a read-coils/discrete response and
+  // on a write-multiple-coils request.
+  repeated bool coils = 7;
+  // Single written value for function 5 (0 or 1) or function 6 (0-65535).
+  int32 value = 8;
+  // AND mask for MaskWriteRegister (function 22).
+  int32 and_mask = 9;
+  // OR mask for MaskWriteRegister (function 22).
+  int32 or_mask = 10;
+  // Read starting address for ReadWriteMultipleRegisters (function 23) requests.
+  int32 read_address = 11;
+  // Read quantity for ReadWriteMultipleRegisters (function 23) requests.
+  int32 read_count = 12;
+  // Write starting address for ReadWriteMultipleRegisters (function 23) requests.
+  int32 write_address = 13;
+  // Registers to write for ReadWriteMultipleRegisters (function 23) requests.
+  repeated int32 write_registers = 14;
+  // True if this frame is a Modbus exception response.
+  bool is_exception = 15;
+  // Modbus exception code (1=IllegalFunction, 2=IllegalDataAddress,
+  // 3=IllegalDataValue, 4=SlaveDeviceFailure, ...). Only meaningful if is_exception.
+  int32 exception_code = 16;
+}
+
+// A raw Modbus RTU application data unit (device id + PDU + CRC16), the bytes
+// exchanged on a serial line.
+message RtuBytes {
+  bytes data = 1;
+}
+
+// Input to DecodeRtuFrame.
+message DecodeRtuFrameInput {
+  // Raw RTU bytes: [device id][function code][data][CRC lo][CRC hi].
+  bytes data = 1;
+  // True to decode `data` as a RESPONSE PDU (server -> client); false to decode it
+  // as a REQUEST PDU (client -> server). The two share function codes but not
+  // always the same field layout, so the caller must say which side it is.
+  bool is_response = 2;
+}
+
+// Output of DecodeRtuFrame.
+message DecodeRtuFrameOutput {
+  ModbusFrame frame = 1;
+  // True if the trailing CRC16 matched the computed CRC16 of the frame bytes.
+  bool crc_valid = 2;
+  // Empty on success. On a malformed frame (short, unknown function code, bad CRC)
+  // this is a human-readable description and `frame`/`crc_valid` are zero-valued.
+  string error = 3;
+}
+
+// Input to EncodeRtuFrame.
+message EncodeRtuFrameInput {
+  ModbusFrame frame = 1;
+  // True to encode `frame` as a RESPONSE PDU; false to encode it as a REQUEST PDU.
+  bool is_response = 2;
+}
+
+// Output of EncodeRtuFrame.
+message EncodeRtuFrameOutput {
+  // Raw RTU bytes with the CRC16 appended, ready to send on a serial line.
+  bytes data = 1;
+  // Empty on success; a human-readable description of why the frame could not be
+  // built (e.g. address/count out of range) on failure.
+  string error = 2;
+}
+
+// Input to DecodeTcpFrame.
+message DecodeTcpFrameInput {
+  // Raw Modbus TCP ADU bytes: MBAP header (transaction id, protocol id, length,
+  // unit id) followed by the PDU. No CRC — TCP relies on the transport for
+  // integrity and the MBAP length field for framing.
+  bytes data = 1;
+  bool is_response = 2;
+}
+
+// Output of DecodeTcpFrame.
+message DecodeTcpFrameOutput {
+  ModbusFrame frame = 1;
+  // Empty on success. On a malformed frame (short, bad protocol id, length
+  // mismatch, unknown function code) this is a human-readable description and
+  // `frame` is zero-valued.
+  string error = 2;
+}
+
+// Input to EncodeTcpFrame.
+message EncodeTcpFrameInput {
+  ModbusFrame frame = 1;
+  bool is_response = 2;
+}
+
+// Output of EncodeTcpFrame.
+message EncodeTcpFrameOutput {
+  // Raw Modbus TCP ADU bytes: MBAP header + PDU, ready to send over a TCP stream.
+  bytes data = 1;
+  string error = 2;
+}
+
+// Input to DecodeAsciiFrame.
+message DecodeAsciiFrameInput {
+  // A Modbus ASCII frame as sent on the wire: ':' + hex-encoded
+  // [device id][function code][data][LRC] + CRLF. Leading/trailing whitespace is
+  // tolerated.
+  string frame = 1;
+  bool is_response = 2;
+}
+
+// Output of DecodeAsciiFrame.
+message DecodeAsciiFrameOutput {
+  ModbusFrame frame = 1;
+  // True if the trailing LRC matched the computed LRC of the frame bytes.
+  bool lrc_valid = 2;
+  string error = 3;
+}
+
+// Input to EncodeAsciiFrame.
+message EncodeAsciiFrameInput {
+  ModbusFrame frame = 1;
+  bool is_response = 2;
+}
+
+// Output of EncodeAsciiFrame.
+message EncodeAsciiFrameOutput {
+  // A complete Modbus ASCII frame: ':' + uppercase hex + CRLF, with the LRC
+  // computed and appended.
+  string frame = 1;
+  string error = 2;
+}
+
+// Input to ComputeCrc16.
+message ComputeCrc16Input {
+  // Arbitrary bytes to checksum (typically device id + function code + data).
+  bytes data = 1;
+  // If true, `expected_crc16` is compared against the computed CRC16 and the
+  // result is returned in `matches`.
+  bool validate = 2;
+  // The CRC16 to compare against when validate is true (low byte first, as it
+  // appears on the wire, combined big-endian here: (hi << 8) | lo is NOT assumed —
+  // pass the CRC as a plain integer 0-65535).
+  int32 expected_crc16 = 3;
+}
+
+// Output of ComputeCrc16.
+message ComputeCrc16Output {
+  // The Modbus CRC16 (initialized 0xFFFF, polynomial 0xA001) of `data`, 0-65535.
+  int32 crc16 = 1;
+  // `crc16` as the two wire bytes, low byte first (as Modbus RTU transmits it).
+  bytes crc16_bytes = 2;
+  // Only meaningful when the input's `validate` was true: whether `expected_crc16`
+  // matched the computed CRC16.
+  bool matches = 3;
+  // Empty on success; a human-readable description (e.g. input too large) on failure.
+  string error = 4;
+}
+
+// Input to ComputeLrc.
+message ComputeLrcInput {
+  // Arbitrary bytes to checksum (typically device id + function code + data).
+  bytes data = 1;
+  bool validate = 2;
+  // The LRC to compare against when validate is true, 0-255.
+  int32 expected_lrc = 3;
+}
+
+// Output of ComputeLrc.
+message ComputeLrcOutput {
+  // The Modbus ASCII LRC (two's complement of the sum of bytes, masked to 8 bits)
+  // of `data`, 0-255.
+  int32 lrc = 1;
+  bool matches = 2;
+  // Empty on success; a human-readable description (e.g. input too large) on failure.
+  string error = 3;
+}
+
+// Input to DecodeRegisterBlock.
+message DecodeRegisterBlockInput {
+  // Raw 16-bit register values (each 0-65535), in wire order.
+  repeated int32 registers = 1;
+  // One of "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32",
+  // "float64". Multi-register types consume 2 or 4 consecutive registers per value.
+  string value_type = 2;
+  // Byte order WITHIN each 16-bit register: "big" (default, standard Modbus) or
+  // "little".
+  string byte_order = 3;
+  // Order of the registers themselves when a value spans more than one register:
+  // "big" (default — first register is most significant) or "little" (first
+  // register is least significant, aka "byte-swapped"/"word-swapped" encoding).
+  string word_order = 4;
+}
+
+// One decoded typed value.
+message TypedValue {
+  // Convenience floating-point rendering of the value. Exact for int16/uint16/
+  // int32/uint32/float32/float64; may lose precision for int64/uint64 magnitudes
+  // beyond 2^53 — use `as_string` for exact integer precision.
+  double as_double = 1;
+  // Exact decimal string rendering of the value — always precise, including full
+  // int64/uint64 range.
+  string as_string = 2;
+}
+
+// Output of DecodeRegisterBlock.
+message DecodeRegisterBlockOutput {
+  repeated TypedValue values = 1;
+  string error = 2;
+}
+
+// Input to EncodeRegisterBlock.
+message EncodeRegisterBlockInput {
+  // Decimal string representation of each value to encode (e.g. "1234", "-56.75").
+  // Strings avoid float round-tripping issues for large integer types.
+  repeated string values = 1;
+  string value_type = 2;
+  string byte_order = 3;
+  string word_order = 4;
+}
+
+// Output of EncodeRegisterBlock.
+message EncodeRegisterBlockOutput {
+  // Raw 16-bit register values (each 0-65535), in wire order.
+  repeated int32 registers = 1;
+  string error = 2;
+}
+
+// Input to PackCoils.
+message PackCoilsInput {
+  // Coil/discrete-input bit values to pack, LSB-first within each byte (the
+  // Modbus wire order).
+  repeated bool bits = 1;
+}
+
+// Output of PackCoils.
+message PackCoilsOutput {
+  // `bits` packed into bytes, LSB-first, zero-padded to a whole byte.
+  bytes data = 1;
+  // Empty on success; a human-readable description (e.g. input too large) on failure.
+  string error = 2;
+}
+
+// Input to UnpackCoils.
+message UnpackCoilsInput {
+  // Packed coil/discrete-input bytes, LSB-first within each byte.
+  bytes data = 1;
+  // Number of valid bits to return (the rest of the final byte is zero-padding
+  // and is dropped). If 0, all 8*len(data) bits are returned.
+  int32 count = 2;
+}
+
+// Output of UnpackCoils.
+message UnpackCoilsOutput {
+  repeated bool bits = 1;
+  // Empty on success; a human-readable description (e.g. input too large) on failure.
+  string error = 2;
+}

@@ -29,6 +29,15 @@ def test_unpack_coils_count_exceeds_available_is_structured_error():
     assert result.error != ""
 
 
+def test_unpack_coils_negative_count_is_structured_error_not_silently_truncated():
+    # A negative count used to silently return a truncated (wrong) bit list
+    # via Python's negative-slice semantics (bits[:-1]) instead of erroring.
+    ax = FakeAxiomContext()
+    result = unpack_coils(ax, UnpackCoilsInput(data=bytes([0x81]), count=-1))
+    assert result.error != ""
+    assert len(result.bits) == 0
+
+
 def test_pack_then_unpack_round_trips():
     from gen.messages_pb2 import PackCoilsInput
     from nodes.pack_coils import pack_coils

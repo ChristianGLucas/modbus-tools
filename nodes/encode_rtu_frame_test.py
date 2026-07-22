@@ -47,3 +47,26 @@ def test_encode_rtu_missing_frame_is_structured_error():
     ax = FakeAxiomContext()
     result = encode_rtu_frame(ax, EncodeRtuFrameInput())
     assert result.error != ""
+
+
+def test_encode_rtu_device_id_out_of_range_is_structured_error_not_a_traceback():
+    # A device_id > 255 used to escape the except clause (pymodbus raises
+    # ModbusIOException, not ValueError) and leak a raw Python traceback into
+    # the error field. Regression test for that.
+    ax = FakeAxiomContext()
+    frame = ModbusFrame(function_code=3, device_id=300, address=0, count=1)
+    result = encode_rtu_frame(ax, EncodeRtuFrameInput(frame=frame, is_response=False))
+    assert result.error != ""
+    assert result.data == b""
+    assert "Traceback" not in result.error
+    assert "device_id" in result.error
+
+
+def test_encode_rtu_negative_device_id_is_structured_error_not_a_traceback():
+    # A negative device_id used to raise OverflowError from int.to_bytes(),
+    # also escaping the except clause. Regression test for that.
+    ax = FakeAxiomContext()
+    frame = ModbusFrame(function_code=3, device_id=-1, address=0, count=1)
+    result = encode_rtu_frame(ax, EncodeRtuFrameInput(frame=frame, is_response=False))
+    assert result.error != ""
+    assert "Traceback" not in result.error

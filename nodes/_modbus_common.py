@@ -22,6 +22,7 @@ from pymodbus.pdu.bit_message import (
 from pymodbus.pdu.decoders import DecodePDU
 from pymodbus.pdu.exceptionresponse import ExceptionResponse
 from pymodbus.pdu.utils import pack_bitstring, unpack_bitstring
+from pymodbus.exceptions import ModbusException
 from pymodbus.pdu.register_message import (
     MaskWriteRegisterRequest,
     MaskWriteRegisterResponse,
@@ -51,6 +52,17 @@ MAX_CHECKSUM_BYTES = 65536  # bounds the standalone ComputeCrc16/ComputeLrc util
 
 class ModbusCodecError(ValueError):
     """Raised for any malformed input; callers turn this into a structured error field."""
+
+
+# Every exception type an encode node's try/except should catch and turn into
+# a structured `error` string rather than letting a raw traceback leak out.
+# ModbusCodecError/ValueError cover our own and pymodbus's validation checks
+# (verifyAddress/verifyCount); OverflowError covers a negative device_id/tid
+# reaching int.to_bytes(); ModbusException is pymodbus's own exception base
+# (e.g. ModbusIOException on an out-of-range device id) — kept as a defensive
+# backstop even though frame_to_pdu now validates device_id/transaction_id
+# itself before any pymodbus call.
+ENCODE_ERROR_TYPES = (ModbusCodecError, ValueError, OverflowError, ModbusException)
 
 
 def new_decoder(is_response: bool) -> DecodePDU:
@@ -137,6 +149,11 @@ def frame_to_pdu(frame, is_response: bool):
     fc = frame.function_code
     dev_id = frame.device_id
     tid = frame.transaction_id
+
+    if not 0 <= dev_id <= 255:
+        raise ModbusCodecError(f"device_id out of range 0-255: {dev_id}")
+    if not 0 <= tid <= 0xFFFF:
+        raise ModbusCodecError(f"transaction_id out of range 0-65535: {tid}")
 
     if frame.is_exception:
         return ExceptionResponse(fc, frame.exception_code, device_id=dev_id, transaction=tid)
@@ -308,6 +325,8 @@ def pack_coils(bits: list) -> bytes:
 
 def unpack_coils(data: bytes, count: int) -> list:
     """Inverse of pack_coils. count=0 returns every bit (including padding)."""
+    if count < 0:
+        raise ModbusCodecError(f"count must be >= 0, got {count}")
     bits = unpack_bitstring(bytes(data))
     if count:
         if count > len(bits):

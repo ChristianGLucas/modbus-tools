@@ -2,7 +2,7 @@ from pymodbus.framer.ascii import FramerAscii
 
 from gen.messages_pb2 import EncodeAsciiFrameInput, EncodeAsciiFrameOutput
 from gen.axiom_context import AxiomContext
-from nodes._modbus_common import ModbusCodecError, frame_to_pdu, new_decoder
+from nodes._modbus_common import ENCODE_ERROR_TYPES, frame_to_pdu, new_decoder
 
 
 def encode_ascii_frame(ax: AxiomContext, input: EncodeAsciiFrameInput) -> EncodeAsciiFrameOutput:
@@ -19,7 +19,7 @@ def encode_ascii_frame(ax: AxiomContext, input: EncodeAsciiFrameInput) -> Encode
         pdu = frame_to_pdu(input.frame, input.is_response)
         framer = FramerAscii(decoder)
         data = framer.buildFrame(pdu)
-    except (ModbusCodecError, ValueError) as exc:
-        return EncodeAsciiFrameOutput(error=str(exc))
+    except ENCODE_ERROR_TYPES as exc:
+        return EncodeAsciiFrameOutput(error=f"{type(exc).__name__}: {exc}")
 
     return EncodeAsciiFrameOutput(frame=data.decode("ascii"))

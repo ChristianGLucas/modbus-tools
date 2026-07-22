@@ -2,7 +2,7 @@ from pymodbus.framer.socket import FramerSocket
 
 from gen.messages_pb2 import EncodeTcpFrameInput, EncodeTcpFrameOutput
 from gen.axiom_context import AxiomContext
-from nodes._modbus_common import ModbusCodecError, frame_to_pdu, new_decoder
+from nodes._modbus_common import ENCODE_ERROR_TYPES, frame_to_pdu, new_decoder
 
 
 def encode_tcp_frame(ax: AxiomContext, input: EncodeTcpFrameInput) -> EncodeTcpFrameOutput:
@@ -19,7 +19,7 @@ def encode_tcp_frame(ax: AxiomContext, input: EncodeTcpFrameInput) -> EncodeTcpF
         pdu = frame_to_pdu(input.frame, input.is_response)
         framer = FramerSocket(decoder)
         data = framer.buildFrame(pdu)
-    except (ModbusCodecError, ValueError) as exc:
-        return EncodeTcpFrameOutput(error=str(exc))
+    except ENCODE_ERROR_TYPES as exc:
+        return EncodeTcpFrameOutput(error=f"{type(exc).__name__}: {exc}")
 
     return EncodeTcpFrameOutput(data=data)

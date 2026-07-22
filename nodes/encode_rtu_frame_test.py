@@ -70,3 +70,31 @@ def test_encode_rtu_negative_device_id_is_structured_error_not_a_traceback():
     result = encode_rtu_frame(ax, EncodeRtuFrameInput(frame=frame, is_response=False))
     assert result.error != ""
     assert "Traceback" not in result.error
+
+
+def test_encode_rtu_mask_write_out_of_range_and_mask_is_structured_error():
+    # and_mask > 65535 used to raise struct.error deep inside pymodbus's
+    # encode() (a format-overflow error), escaping the except clause and
+    # leaking a raw traceback. Regression test for that.
+    ax = FakeAxiomContext()
+    frame = ModbusFrame(function_code=22, device_id=1, address=10, and_mask=700000, or_mask=1)
+    result = encode_rtu_frame(ax, EncodeRtuFrameInput(frame=frame, is_response=False))
+    assert result.error != ""
+    assert "Traceback" not in result.error
+    assert "and_mask" in result.error
+
+
+def test_encode_rtu_exception_code_out_of_range_is_structured_error():
+    ax = FakeAxiomContext()
+    frame = ModbusFrame(function_code=3, device_id=1, is_exception=True, exception_code=9999)
+    result = encode_rtu_frame(ax, EncodeRtuFrameInput(frame=frame, is_response=True))
+    assert result.error != ""
+    assert "Traceback" not in result.error
+
+
+def test_encode_rtu_write_single_register_value_out_of_range_is_structured_error():
+    ax = FakeAxiomContext()
+    frame = ModbusFrame(function_code=6, device_id=1, address=0, value=999999)
+    result = encode_rtu_frame(ax, EncodeRtuFrameInput(frame=frame, is_response=False))
+    assert result.error != ""
+    assert "Traceback" not in result.error

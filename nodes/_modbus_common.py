@@ -58,11 +58,13 @@ class ModbusCodecError(ValueError):
 # a structured `error` string rather than letting a raw traceback leak out.
 # ModbusCodecError/ValueError cover our own and pymodbus's validation checks
 # (verifyAddress/verifyCount); OverflowError covers a negative device_id/tid
-# reaching int.to_bytes(); ModbusException is pymodbus's own exception base
-# (e.g. ModbusIOException on an out-of-range device id) — kept as a defensive
-# backstop even though frame_to_pdu now validates device_id/transaction_id
-# itself before any pymodbus call.
-ENCODE_ERROR_TYPES = (ModbusCodecError, ValueError, OverflowError, ModbusException)
+# reaching int.to_bytes(); struct.error covers a field (and_mask/or_mask/
+# exception_code/register value) that overflows the wire width pymodbus packs
+# it into (e.g. struct.pack(">H", ...) with a value > 65535); ModbusException
+# is pymodbus's own exception base (e.g. ModbusIOException on an out-of-range
+# device id). frame_to_pdu now validates every field it can up front, so these
+# are kept as a defensive backstop for anything that validation doesn't cover.
+ENCODE_ERROR_TYPES = (ModbusCodecError, ValueError, OverflowError, struct.error, ModbusException)
 
 
 def new_decoder(is_response: bool) -> DecodePDU:
@@ -156,6 +158,8 @@ def frame_to_pdu(frame, is_response: bool):
         raise ModbusCodecError(f"transaction_id out of range 0-65535: {tid}")
 
     if frame.is_exception:
+        if not 0 <= frame.exception_code <= 0xFF:
+            raise ModbusCodecError(f"exception_code out of range 0-255: {frame.exception_code}")
         return ExceptionResponse(fc, frame.exception_code, device_id=dev_id, transaction=tid)
 
     if fc in (1, 2):
@@ -183,6 +187,8 @@ def frame_to_pdu(frame, is_response: bool):
         return cls(dev_id=dev_id, transaction_id=tid, address=frame.address, bits=[bool(frame.value)])
 
     if fc == 6:
+        if not 0 <= frame.value <= 0xFFFF:
+            raise ModbusCodecError(f"value out of range 0-65535: {frame.value}")
         cls = WriteSingleRegisterResponse if is_response else WriteSingleRegisterRequest
         return cls(dev_id=dev_id, transaction_id=tid, address=frame.address, registers=[frame.value])
 
@@ -212,6 +218,10 @@ def frame_to_pdu(frame, is_response: bool):
         )
 
     if fc == 22:
+        if not 0 <= frame.and_mask <= 0xFFFF:
+            raise ModbusCodecError(f"and_mask out of range 0-65535: {frame.and_mask}")
+        if not 0 <= frame.or_mask <= 0xFFFF:
+            raise ModbusCodecError(f"or_mask out of range 0-65535: {frame.or_mask}")
         cls = MaskWriteRegisterResponse if is_response else MaskWriteRegisterRequest
         return cls(
             address=frame.address,

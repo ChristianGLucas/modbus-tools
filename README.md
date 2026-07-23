@@ -1,6 +1,6 @@
 # modbus-tools
 
-Composable [Axiom](https://axiom.dev) nodes for Modbus industrial-protocol frame
+Composable [Axiom](https://axiomide.com) nodes for Modbus industrial-protocol frame
 encode/decode — pure, stateless codec logic wrapping
 [pymodbus](https://github.com/pymodbus-dev/pymodbus) (BSD-3-Clause). No socket
 or bus I/O: every node is a single-input → single-output function over bytes.

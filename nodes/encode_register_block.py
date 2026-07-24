@@ -1,6 +1,6 @@
 from gen.messages_pb2 import EncodeRegisterBlockInput, EncodeRegisterBlockOutput
 from gen.axiom_context import AxiomContext
-from nodes._modbus_common import MAX_REGISTERS, ModbusCodecError, encode_typed_values
+from nodes._modbus_common import ModbusCodecError, encode_typed_values
 
 
 def encode_register_block(ax: AxiomContext, input: EncodeRegisterBlockInput) -> EncodeRegisterBlockOutput:
@@ -13,8 +13,6 @@ def encode_register_block(ax: AxiomContext, input: EncodeRegisterBlockInput) -> 
     a crash.
     """
     values = list(input.values)
-    if len(values) > MAX_REGISTERS:
-        return EncodeRegisterBlockOutput(error=f"values exceeds {MAX_REGISTERS} entries")
 
     try:
         registers = encode_typed_values(

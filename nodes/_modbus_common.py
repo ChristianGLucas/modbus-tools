@@ -44,10 +44,7 @@ from pymodbus.pdu.register_message import (
 # out of scope — see the retrospective for why.
 SUPPORTED_FUNCTION_CODES = (1, 2, 3, 4, 5, 6, 15, 16, 22, 23)
 
-MAX_FRAME_BYTES = 260  # generous ceiling; real Modbus PDUs are <= 253 bytes
-MAX_REGISTERS = 4096  # bounds DecodeRegisterBlock/EncodeRegisterBlock input size
-MAX_BITS = 65536  # bounds PackCoils/UnpackCoils input size
-MAX_CHECKSUM_BYTES = 65536  # bounds the standalone ComputeCrc16/ComputeLrc utilities
+MAX_FRAME_BYTES = 260  # real Modbus PDUs are <= 253 bytes per spec (RTU/ASCII/TCP)
 
 
 class ModbusCodecError(ValueError):

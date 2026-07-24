@@ -1,5 +1,5 @@
 name: christiangeorgelucas/modbus-tools
-version: 0.1.0
+version: 0.2.0
 language: python
 description: Composable Modbus industrial-protocol frame encode/decode nodes wrapping BSD-3-Clause pymodbus — decode/encode Modbus RTU frames (device id + PDU + CRC16), Modbus TCP/MBAP application data units, and Modbus ASCII frames (LRC-checked) into/from a canonical function-code + fields envelope (register/coil addresses, quantities, values, coil bits, exception codes) covering read/write coils, read/write holding and input registers, mask-write register, and read/write-multiple registers. Also exposes standalone CRC16/LRC computation, typed register-block decode/encode (int16/uint16/int32/uint32/int64/uint64/float32/float64 with configurable byte/word order), and coil-bit packing utilities. Pure stateless codec — no socket or bus I/O. Offline, deterministic.
 nodes:

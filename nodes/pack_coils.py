@@ -1,6 +1,6 @@
 from gen.messages_pb2 import PackCoilsInput, PackCoilsOutput
 from gen.axiom_context import AxiomContext
-from nodes._modbus_common import MAX_BITS, pack_coils as _pack_coils
+from nodes._modbus_common import pack_coils as _pack_coils
 
 
 def pack_coils(ax: AxiomContext, input: PackCoilsInput) -> PackCoilsOutput:
@@ -9,8 +9,5 @@ def pack_coils(ax: AxiomContext, input: PackCoilsInput) -> PackCoilsOutput:
     Zero-pads the final byte if the bit count isn't a multiple of 8.
     """
     bits = list(input.bits)
-    if len(bits) > MAX_BITS:
-        return PackCoilsOutput(error=f"bits exceeds {MAX_BITS} entries")
-
     data = _pack_coils(bits)
     return PackCoilsOutput(data=data)

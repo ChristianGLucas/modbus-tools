@@ -34,7 +34,8 @@ def test_compute_crc16_validate_false_ignores_expected():
     assert result.matches is False  # not evaluated when validate=False
 
 
-def test_compute_crc16_too_large_is_structured_error():
+def test_compute_crc16_large_input_no_crash():
+    # Input size is the platform's concern, not this node's.
     ax = FakeAxiomContext()
     result = compute_crc16(ax, ComputeCrc16Input(data=b"\x00" * 70000))
-    assert result.error != ""
+    assert result.error == ""
